@@ -64,6 +64,9 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Dar permisos de ejecución a Gradle Wrapper
+        run: chmod +x ./gradlew
+
       - name: Construir aplicación
         run: |
           echo "=== CONSTRUYENDO ARTEFACTO ==="
@@ -95,6 +98,9 @@ jobs:
       (github.ref == 'refs/heads/development' || github.ref == 'refs/heads/main')
 
     steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
       - name: Descargar artefacto JAR
         uses: actions/download-artifact@v4
         with:
@@ -105,10 +111,13 @@ jobs:
         run: |
           echo "=== VERIFICANDO ARTEFACTO DESCARGADO ==="
           ls -la build/libs/
-          echo "=== NOMBRE EXACTO DEL JAR PARA DEPLOY ==="
-          JAR_FILE=$(ls build/libs/*.jar)
-          echo "JAR para deploy: $JAR_FILE"
-          echo "DEPLOY_JAR=$JAR_FILE" >> $GITHUB_ENV
+          echo "=== CREANDO DEPLOYMENT PACKAGE ==="
+          cd build/libs/
+          JAR_FILE=$(ls *.jar | head -n 1)
+          echo "JAR encontrado: $JAR_FILE"
+          zip application.zip $JAR_FILE
+          cd ../..
+          echo "DEPLOY_PACKAGE=build/libs/application.zip" >> $GITHUB_ENV
 
       - name: Configurar AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -126,7 +135,7 @@ jobs:
           environment_name: ${{ env.ELASTIC_BEANSTALK_ENV_NAME }}
           version_label: ${{ github.sha }}-${{ github.run_id }}
           region: ${{ env.AWS_REGION }}
-          deployment_package: build/libs/$(ls build/libs/ | grep .jar)
+          deployment_package: build/libs/application.zip
           wait_for_environment_recovery: 180
 
       - name: Verificar despliegue exitoso
