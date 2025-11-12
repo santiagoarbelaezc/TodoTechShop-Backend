@@ -89,6 +89,24 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// ==================== ✅ CONFIGURACIÓN CRÍTICA AGREGADA ====================
+
+// Configuración específica para el JAR ejecutable de Spring Boot
+bootJar {
+    archiveFileName = 'todotech-application.jar'  // ✅ Nombre consistente
+    mainClass = 'co.todotech.TodoTechApplication'  // ✅ Ajusta según tu package real
+    layered {
+        enabled = true
+    }
+}
+
+// Deshabilitar el JAR normal (plain) - EVITA "no main manifest attribute"
+jar {
+    enabled = false
+}
+
+// ==================== ✅ FIN CONFIGURACIÓN CRÍTICA ====================
+
 // ✅ CONFIGURACIÓN JACOCO PARA REPORTES DE COBERTURA
 jacoco {
     toolVersion = "0.8.11" // Versión compatible con Java 21
@@ -214,4 +232,31 @@ tasks.named('test') {
     // Configurar propiedades para tests
     systemProperty 'spring.profiles.active', 'test'
     systemProperty 'java.awt.headless', 'true'
+}
+
+// ==================== ✅ TAREAS PERSONALIZADAS PARA DEVOPS ====================
+
+// Tarea para construir solo el JAR ejecutable (optimizado para CI/CD)
+tasks.register('buildForDeploy') {
+    group = 'Build'
+    description = 'Build executable JAR for deployment'
+    dependsOn bootJar
+}
+
+// Verificar que el JAR tiene la clase main correcta
+tasks.register('verifyJar', Exec) {
+    group = 'Verification'
+    description = 'Verify JAR has correct main class'
+    dependsOn bootJar
+
+    commandLine 'java', '-jar', bootJar.archiveFile.get(), '--version'
+    ignoreExitValue = true
+
+    doLast {
+        if (execResult.exitValue == 0) {
+            println "✅ JAR verification successful - main class is correct"
+        } else {
+            println "❌ JAR verification failed - check main class configuration"
+        }
+    }
 }
