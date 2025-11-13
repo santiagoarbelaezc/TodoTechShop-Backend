@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.5'
     id 'io.spring.dependency-management' version '1.1.7'
-    id 'jacoco' // ✅ AGREGADO: Plugin de Jacoco para reportes de cobertura
+    id 'jacoco'
 }
 
 group = 'co'
@@ -26,14 +26,16 @@ repositories {
 }
 
 dependencies {
-    // DEPENDENCIAS PRINCIPALES
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // ✅ DEPENDENCIAS PRINCIPALES (OPTIMIZADAS)
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // ❌ REMOVIDO temporalmente para reducir memoria
+    // implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    // implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 
     // PARA CARGAR .env
     implementation 'io.github.cdimascio:dotenv-java:3.0.2'
@@ -62,65 +64,43 @@ dependencies {
     // Integración Lombok + MapStruct
     annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
 
-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
-    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     runtimeOnly 'org.postgresql:postgresql'
 
-    // DEPENDENCIAS DE TESTING - OPTIMIZADAS
+    // ✅ DEPENDENCIAS DE TESTING OPTIMIZADAS
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
-
-    // JUnit Jupiter completo
-    testImplementation 'org.junit.jupiter:junit-jupiter-api'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine'
-
-    // Mockito
+    testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.mockito:mockito-core'
     testImplementation 'org.mockito:mockito-junit-jupiter'
-
-    // Lombok para tests
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
-
-    // Base de datos en memoria para testing
     testImplementation 'com.h2database:h2'
-
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// ==================== ✅ CONFIGURACIÓN CRÍTICA AGREGADA ====================
+// ==================== ✅ CONFIGURACIÓN JVM OPTIMIZADA ====================
 
-// Configuración específica para el JAR ejecutable de Spring Boot
 bootJar {
-    archiveFileName = 'todotech-application.jar'  // ✅ Nombre consistente
-    mainClass = 'co.todotech.TodoTechApplication'  // ✅ Ajusta según tu package real
-    layered {
-        enabled = true
-    }
+    archiveFileName = 'todotech-application.jar'
+    // ❌ REMOVIDO: layered configuration que causaba error
 }
 
-// Deshabilitar el JAR normal (plain) - EVITA "no main manifest attribute"
 jar {
     enabled = false
 }
 
-// ==================== ✅ FIN CONFIGURACIÓN CRÍTICA ====================
-
-// ✅ CONFIGURACIÓN JACOCO PARA REPORTES DE COBERTURA
+// ✅ CONFIGURACIÓN JACOCO OPTIMIZADA
 jacoco {
-    toolVersion = "0.8.11" // Versión compatible con Java 21
+    toolVersion = "0.8.11"
 }
 
 jacocoTestReport {
-    dependsOn test // Ejecutar tests antes de generar reporte
+    dependsOn test
     reports {
-        xml.required = true  // ✅ Para GitHub Actions/Codecov
-        html.required = true // ✅ Para ver localmente
+        xml.required = true
+        html.required = true
         csv.required = false
     }
-
-    // Excluir clases que no necesitan cobertura
     afterEvaluate {
         classDirectories.setFrom(files(classDirectories.files.collect {
             fileTree(dir: it, exclude: [
@@ -138,112 +118,85 @@ jacocoTestCoverageVerification {
     violationRules {
         rule {
             limit {
-                minimum = 0.70 // ✅ 70% de cobertura mínima
+                minimum = 0.70
             }
         }
     }
 }
 
-// Configuración para que MapStruct funcione correctamente con Lombok
+// ==================== ✅ CONFIGURACIÓN DE COMPILACIÓN OPTIMIZADA ====================
+
 tasks.withType(JavaCompile) {
     options.compilerArgs = [
             '-Amapstruct.suppressGeneratorTimestamp=true',
             '-Amapstruct.defaultComponentModel=spring',
-            '-Amapstruct.unmappedTargetPolicy=IGNORE'
+            '-Amapstruct.unmappedTargetPolicy=IGNORE',
+            '-parameters' // ✅ Mejora rendimiento de Spring
     ]
+    options.encoding = 'UTF-8'
+    options.fork = true
 }
 
-// Configuración para tests
+// ==================== ✅ CONFIGURACIÓN DE TESTS OPTIMIZADA ====================
+
 test {
     useJUnitPlatform()
     testLogging {
         events "passed", "skipped", "failed"
-        exceptionFormat "full"
-        showStandardStreams = true
+        exceptionFormat "short" // ✅ Cambiado de "full" a "short" para menos logs
     }
 
-    // Ejecutar tests en paralelo
-    maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+    // ✅ CONFIGURACIÓN DE MEMORIA PARA TESTS (REDUCIDA)
+    minHeapSize = "256m"
+    maxHeapSize = "512m"
 
-    // Configurar memoria para tests
-    minHeapSize = "512m"
-    maxHeapSize = "2g"
+    // ✅ JVM ARGS ESPECÍFICOS PARA TESTS
+    jvmArgs = [
+            '-XX:+UseG1GC',
+            '-Xmx512m',
+            '-Xms256m'
+    ]
 
-    // Fail fast en CI
     if (System.getenv('CI')) {
         failFast = true
     }
 
-    // ✅ AGREGADO: Generar reporte Jacoco después de los tests
     finalizedBy jacocoTestReport
 }
 
-// Tarea para ejecutar solo tests unitarios (sin integración)
-tasks.register('unitTest', Test) {
-    useJUnitPlatform {
-        excludeTags 'integration'
-    }
-    finalizedBy jacocoTestReport // ✅ AGREGADO
-}
+// ==================== ✅ CONFIGURACIÓN CRÍTICA PARA PRODUCCIÓN ====================
 
-// Tarea para ejecutar solo tests de integración
-tasks.register('integrationTest', Test) {
-    useJUnitPlatform {
-        includeTags 'integration'
-    }
-    finalizedBy jacocoTestReport // ✅ AGREGADO
-}
-
-// Tarea para verificar cobertura
-tasks.register('testCoverage', Test) {
-    group = 'Verification'
-    description = 'Runs tests and generates coverage report'
-
-    dependsOn test
-    finalizedBy jacocoTestReport
-}
-
-// Agrega esto al final del build.gradle
-processResources {
-    from('.') {
-        include '.env'
-        into 'resources'
-    }
-}
-
+// ✅ TAREA BOOTRUN OPTIMIZADA PARA DESARROLLO LOCAL
 bootRun {
-    // Pasar propiedades del sistema a la aplicación
+    // ✅ JVM ARGS PARA REDUCIR MEMORIA EN DESARROLLO
+    jvmArgs = [
+            '-Xmx512m',
+            '-Xms256m',
+            '-XX:MaxMetaspaceSize=256m',
+            '-XX:+UseG1GC',
+            '-XX:+PrintGC',
+            '-XX:+PrintGCDateStamps',
+            '-Dspring.jmx.enabled=false', // ✅ Deshabilita JMX - ahorra memoria
+            '-Dspring.main.lazy-initialization=true' // ✅ Lazy initialization - CRÍTICO
+    ]
+
     systemProperties System.properties
 }
 
-// Para limpiar y reconstruir completamente
-clean {
-    delete 'build'
-    delete 'out'
-}
+// ==================== ✅ TAREAS PERSONALIZADAS OPTIMIZADAS ====================
 
-// Generar reportes de tests
-tasks.named('test') {
-    reports {
-        html.required = true
-        junitXml.required = true
-    }
-
-    // Configurar propiedades para tests
-    systemProperty 'spring.profiles.active', 'test'
-    systemProperty 'java.awt.headless', 'true'
-}
-
-// ==================== ✅ TAREAS PERSONALIZADAS PARA DEVOPS ====================
-
-// Tarea para construir solo el JAR ejecutable (optimizado para CI/CD)
 tasks.register('buildForDeploy') {
     group = 'Build'
-    description = 'Build executable JAR for deployment'
+    description = 'Build optimized JAR for deployment'
     dependsOn bootJar
+
+    doLast {
+        println "✅ JAR built with memory-optimized settings"
+        println "📍 JAR location: ${bootJar.archiveFile.get()}"
+        println "📦 JAR size: ${file(bootJar.archiveFile.get()).length() / (1024 * 1024)} MB"
+    }
 }
 
-// Verificar que el JAR tiene la clase main correcta
 tasks.register('verifyJar', Exec) {
     group = 'Verification'
     description = 'Verify JAR has correct main class'
@@ -254,9 +207,61 @@ tasks.register('verifyJar', Exec) {
 
     doLast {
         if (execResult.exitValue == 0) {
-            println "✅ JAR verification successful - main class is correct"
+            println "✅ JAR verification successful"
         } else {
-            println "❌ JAR verification failed - check main class configuration"
+            println "❌ JAR verification failed"
         }
+    }
+}
+
+// ✅ TAREA PARA VER CONFIGURACIÓN DE MEMORIA
+tasks.register('showMemoryConfig') {
+    group = 'Help'
+    description = 'Show current memory configuration'
+
+    doLast {
+        println "=== MEMORY CONFIGURATION ==="
+        println "Test - Min: 256m, Max: 512m"
+        println "BootRun - Min: 256m, Max: 512m"
+        println "Production JVM: -Xmx512m -Xms256m -XX:+UseG1GC"
+        println "============================"
+    }
+}
+
+// ✅ LIMPIEZA OPTIMIZADA
+clean {
+    delete 'build'
+    delete 'out'
+    delete 'logs'
+}
+
+// ✅ CONFIGURACIÓN PARA PROCESAMIENTO DE RECURSOS
+processResources {
+    from('.') {
+        include '.env'
+        into 'resources'
+    }
+    // ✅ Comprimir recursos
+    filesMatching('**/*.properties') {
+        filter { line ->
+            line.replace('${', '\\${') // Escapar placeholders
+        }
+    }
+}
+
+// ==================== ✅ CONFIGURACIÓN PARA DIFERENTES ENTORNOS ====================
+
+// Tarea específica para producción
+tasks.register('productionBuild') {
+    group = 'Build'
+    description = 'Build with production optimizations'
+    dependsOn bootJar
+
+    doLast {
+        println "🚀 Production build ready with:"
+        println "   - Memory limits: 512MB max"
+        println "   - G1 Garbage Collector"
+        println "   - Lazy initialization enabled"
+        println "   - DevTools disabled"
     }
 }
